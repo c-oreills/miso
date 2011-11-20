@@ -25,7 +25,7 @@
 (defn print-room [room]
   (println
     (join "\n"
-          (for [row (room :space)]
+          (for [row @(room :space)]
             (join " " row)))))
 
 (def rooms (ref (hash-map
@@ -33,16 +33,11 @@
                   :next (make-room 5 5),)))
 
 (defn make-player [name]
-  (let [start-room (rooms :start)]
-    (assoc start-room :players
-           (conj (start-room :players)
-                 (hash-map
-                   :name name,
-                   :x 0,
-                   :y 0,
-                   )))))
-
-(make-player "bob")
+  (hash-map
+    :name name,
+    :x 0,
+    :y 0,
+    ))
 
 (defn client-input-loop [input]
   (cond
@@ -55,9 +50,11 @@
   (binding [*in* (reader in)
             *out* (writer out)]
     (binding [*current-room* (ref (rooms :start))]
+      (dosync (commute (@*current-room* :players)
+                       conj (make-player "bob")))
       (loop [input (read-line)]
         (client-input-loop input)
-        (print-room *current-room*)
+        (print-room @*current-room*)
         (if (= input "exit")
           (println "Byeeee")
           (recur (read-line)))))))
