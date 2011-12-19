@@ -5,6 +5,8 @@
 (use '[clojure.string :only (join)])
 
 (def ^:dynamic *current-room*)
+(def ^:dynamic *input-streams* (ref {}))
+(def ^:dynamic *output-streams* (ref {}))
 
 (defn move [dir]
   (println (format "moving %swards" dir)))
@@ -46,20 +48,44 @@
     true (println (format "wtf is '%s'?" input)),
     ))
 
-(defn game-handler [in out]
-  (binding [*in* (reader in)
-            *out* (writer out)]
-    (binding [*current-room* (ref (rooms :start))]
-      (dosync (commute (@*current-room* :players)
-                       conj (make-player "bob")))
-      (loop [input (read-line)]
-        (client-input-loop input)
-        (print-room @*current-room*)
-        (if (= input "exit")
-          (println "Byeeee")
-          (recur (read-line)))))))
+(defn get-player-name [in]
+  (binding [*in* (reader in)]
+    (read-line)))
+
+(defn initial-setup [player-name]
+  (dosync
+    (commute (@*current-room* :players)
+             conj (make-player player-name))
+    (commute *input-streams*
+             assoc player-name *in*)
+    (commute *output-streams*
+             assoc player-name *out*)))
+
+(defn game-handler
+  ([in out player-name]
+   (binding [*in* (reader in)
+             *out* (writer out)
+             *current-room* (ref (rooms :start))]
+     (initial-setup player-name)
+     (loop [input (read-line)]
+       (client-input-loop input)
+       (print-room @*current-room*)
+       (if (= input "exit")
+         (println "Byeeee")
+         (recur (read-line))))))
+  ([in out] (game-handler in out (get-player-name in))))
 
 (defn game-serv []
   (create-server 8080 game-handler))
 
-(def my-server (game-serv))
+;(def my-server (game-serv))
+
+(defn send-output [stream-name & lines]
+  (binding [*out* (@*output-streams* stream-name)]
+    (doall (map println lines))
+    (flush)))
+
+;(defn send-input [stream-name & lines]
+;  (binding [*out* (@*input-streams* stream-name)]
+;    (map println lines)
+;    (flush)))
